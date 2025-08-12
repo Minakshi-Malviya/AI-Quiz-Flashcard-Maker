@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Flashcards Quiz - Hackathon Upgrade</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 30px auto;
+            background: #f4f4f4;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        section {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .flashcard {
+            background: #eaf4ff;
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            text-align: left;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        th {
+            background: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>AI Flashcards Quiz 🔥</h1>
+
+    <section>
+        <h3>Step 1: Generate Flashcards</h3>
+        <input type="text" id="topic" placeholder="Enter topic here">
+        <button onclick="generateFromTopic()">Generate Flashcards</button>
+
+        <h4>OR Upload PDF File:</h4>
+        <input type="file" id="pdfUpload" accept="application/pdf">
+        <button onclick="uploadPDF()">Upload & Generate</button>
+    </section>
+
+    <section>
+        <h3>Flashcards</h3>
+        <div id="flashcards"></div>
+    </section>
+
+    <section>
+        <h3>Step 2: Take Quiz</h3>
+        <input type="text" id="username" placeholder="Enter your name">
+        <button onclick="startQuiz()">Start Quiz</button>
+        <div id="quiz"></div>
+    </section>
+
+    <section>
+        <h3>Leaderboard 🏆</h3>
+        <div id="leaderboard"></div>
+    </section>
+
+<script>
+    let flashcards = [];
+    let quizQuestions = [];
+
+    async function generateFromTopic(){
+        const topic = document.getElementById("topic").value.trim();
+        if(!topic){ alert("Enter a topic or upload PDF!"); return; }
+        const res = await fetch("/generate", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({topic})
+        });
+        const data = await res.json();
+        flashcards = data;
+        showFlashcards();
+    }
+
+    async function uploadPDF(){
+        const fileInput = document.getElementById("pdfUpload");
+        if(fileInput.files.length === 0){
+            alert("Please select a PDF file!");
+            return;
+        }
+        let formData = new FormData();
+        formData.append("pdf", fileInput.files[0]);
+        const res = await fetch("/upload_pdf", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        flashcards = data.flashcards;
+        showFlashcards();
+    }
+
+    function showFlashcards(){
+        const container = document.getElementById("flashcards");
+        container.innerHTML = "";
+        flashcards.forEach(card => {
+            let div = document.createElement("div");
+            div.className = "flashcard";
+            div.innerHTML = `<b>Q:</b> ${card.question}<br><b>A:</b> ${card.answer}`;
+            container.appendChild(div);
+        });
+    }
+
+    async function startQuiz(){
+        const name = document.getElementById("username").value.trim();
+        if(!name){
+            alert("Please enter your name!");
+            return;
+        }
+        const res = await fetch("/quiz");
+        quizQuestions = await res.json();
+
+        if(quizQuestions.length === 0){
+            alert("No flashcards available! Generate first.");
+            return;
+        }
+
+        const quizDiv = document.getElementById("quiz");
+        quizDiv.innerHTML = `<h4>Quiz for ${name}</h4>`;
+        quizQuestions.forEach((q, i) => {
+            quizDiv.innerHTML += `
+            <div>
+                <p>${i+1}. ${q.question}</p>
+                <input type="text" id="answer${i}" placeholder="Your answer here">
+            </div>`;
+        });
+        quizDiv.innerHTML += `<button onclick="submitQuiz(${quizQuestions.length})">Submit Quiz</button>`;
+    }
+
+    async function submitQuiz(total){
+        const name = document.getElementById("username").value.trim();
+        let answers = [];
+        for(let i = 0; i < total; i++){
+            const q = quizQuestions[i].question;
+            const a = document.getElementById(`answer${i}`).value.trim();
+            answers.push({question: q, answer: a});
+        }
+
+        const res = await fetch("/submit_quiz", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name, answers})
+        });
+        const result = await res.json();
+        alert(`Hi ${name}, your score is ${result.score} / ${result.total}`);
+        loadLeaderboard();
+    }
+
+    async function loadLeaderboard(){
+        const res = await fetch("/leaderboard");
+        const leaders = await res.json();
+        const lbDiv = document.getElementById("leaderboard");
+        if(leaders.length === 0){
+            lbDiv.innerHTML = "<p>No leaderboard data yet.</p>";
+            return;
+        }
+        let html = `<table><tr><th>Name</th><th>Score</th><th>Date</th></tr>`;
+        leaders.forEach(l => {
+            html += `<tr><td>${l.name}</td><td>${l.score}</td><td>${l.date}</td></tr>`;
+        });
+        html += "</table>";
+        lbDiv.innerHTML = html;
+    }
+
+    loadLeaderboard();
+</script>
+
+</body>
+</html>
